@@ -19,15 +19,20 @@ var Engine = (function(global) {
      * create the canvas element, grab the 2D context for that canvas
      * set the canvas elements height/width and add it to the DOM.
      */
-    var doc = global.document,
-        win = global.window,
-        canvas = doc.createElement('canvas'),
-        ctx = canvas.getContext('2d'),
-        lastTime;
-
+    var doc = global.document;
+    var win = global.window;
+    var canvas = doc.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    var lastTime;
+    var animationId;
+    var restarCounter = 3;
     canvas.width = 505;
     canvas.height = 606;
     doc.body.appendChild(canvas);
+
+    var centerScreenX = canvas.width / 2;
+    var centerScreenY = canvas.height / 2;
+
 
     /* This function serves as the kickoff point for the game loop itself
      * and handles properly calling the update and render methods.
@@ -39,8 +44,14 @@ var Engine = (function(global) {
          * would be the same for everyone (regardless of how fast their
          * computer is) - hurray time!
          */
+
         var now = Date.now(),
             dt = (now - lastTime) / 1000.0;
+
+        /* Use the browser's requestAnimationFrame function to call this
+         * function again as soon as the browser is able to draw another frame.
+         */
+        animationId = win.requestAnimationFrame(main);
 
         /* Call our update/render functions, pass along the time delta to
          * our update function since it may be used for smooth animation.
@@ -53,10 +64,7 @@ var Engine = (function(global) {
          */
         lastTime = now;
 
-        /* Use the browser's requestAnimationFrame function to call this
-         * function again as soon as the browser is able to draw another frame.
-         */
-        win.requestAnimationFrame(main);
+        checkIfWon();
     }
 
     /* This function does some initial setup that should only occur once,
@@ -80,7 +88,7 @@ var Engine = (function(global) {
      */
     function update(dt) {
         updateEntities(dt);
-        // checkCollisions();
+        checkCollisions();
     }
 
     /* This is called by the update function and loops through all of the
@@ -94,7 +102,7 @@ var Engine = (function(global) {
         allEnemies.forEach(function(enemy) {
             enemy.update(dt);
         });
-        player.update();
+        this.player.update(dt);
     }
 
     /* This function initially draws the "game level", it will then call
@@ -104,16 +112,19 @@ var Engine = (function(global) {
      * they are just drawing the entire screen over and over.
      */
     function render() {
+
+        ctx.clearRect(0, 0, 505, 606);
+
         /* This array holds the relative URL to the image used
          * for that particular row of the game level.
          */
         var rowImages = [
-                'images/water-block.png',   // Top row is water
-                'images/stone-block.png',   // Row 1 of 3 of stone
-                'images/stone-block.png',   // Row 2 of 3 of stone
-                'images/stone-block.png',   // Row 3 of 3 of stone
-                'images/grass-block.png',   // Row 1 of 2 of grass
-                'images/grass-block.png'    // Row 2 of 2 of grass
+                'images/water-block.png', // Top row is water
+                'images/stone-block.png', // Row 1 of 3 of stone
+                'images/stone-block.png', // Row 2 of 3 of stone
+                'images/stone-block.png', // Row 3 of 3 of stone
+                'images/grass-block.png', // Row 1 of 2 of grass
+                'images/grass-block.png' // Row 2 of 2 of grass
             ],
             numRows = 6,
             numCols = 5,
@@ -147,11 +158,16 @@ var Engine = (function(global) {
         /* Loop through all of the objects within the allEnemies array and call
          * the render function you have defined.
          */
+
+        allGems.forEach(function(gem) {
+            gem.render();
+        });
+
         allEnemies.forEach(function(enemy) {
             enemy.render();
         });
 
-        player.render();
+        this.player.render();
     }
 
     /* This function does nothing but it could have been a good place to
@@ -159,7 +175,160 @@ var Engine = (function(global) {
      * those sorts of things. It's only called once by the init() method.
      */
     function reset() {
-        // noop
+        this.player.setInitialState();
+        allEnemies.forEach(function(enemy) {
+            enemy.setInitialState();
+        });
+
+        allGems.forEach(function(gem) {
+            gem.setRandomLocation();
+            gem.mustRender = true;
+        });
+    }
+
+    /* This function check if the player is in the winning section.
+     */
+    function checkIfWon() {
+        if (this.player.posY <= -20) {
+            cancelAnimationFrame(animationId);
+
+            // Count games won score
+            document.getElementById('gw').innerHTML = ++this.score.gamesWon;
+
+            // Display you won message
+            displayYouWon();
+
+            // Start reset counter
+            startCounter();
+
+            // Update total games played
+            document.getElementById('tgp').innerHTML = this.score.gamesWon + this.score.gamesLost;
+        }
+    }
+
+    /* This function check if the player was touched.
+     */
+    function checkIfLoose() {
+        for (var i = 0; i < this.allEnemies.length; i++) {
+
+            var hit = !(this.player.posX + this.player.width < this.allEnemies[i].posX ||
+                this.allEnemies[i].posX + this.allEnemies[i].width < this.player.posX ||
+                this.player.posY + this.player.height < this.allEnemies[i].posY ||
+                this.allEnemies[i].posY + this.allEnemies[i].height < this.player.posY);
+
+            if (hit) {
+                cancelAnimationFrame(animationId);
+
+                // Count games lost score
+                document.getElementById('gl').innerHTML = ++this.score.gamesLost;
+
+                // Display you LOST message
+                displayYouLost();
+                // Start reset counter
+                startCounter();
+
+                // Reset score only when losing
+                document.getElementById('bg').innerHTML = 0;
+                this.score.blueGem = 0;
+                document.getElementById('gg').innerHTML = 0;
+                this.score.greenGem = 0;
+                document.getElementById('og').innerHTML = 0;
+                this.score.orangeGem = 0;
+
+                // Update total games played
+                document.getElementById('tgp').innerHTML = this.score.gamesWon + this.score.gamesLost;
+
+                break;
+            }
+
+        }
+    }
+
+    /* This function display a counter to start the next game after loosing or winning.
+     */
+    function displayCounter(counter) {
+        ctx.strokeStyle = 'black';
+        ctx.fillStyle = '#E66800';
+        ctx.lineWidth = 3;
+        ctx.textAlign = 'center';
+        ctx.font = '80px Impact';
+        //ctx.clearRect(centerScreenX, centerScreenY + 80, 50, 50);
+        ctx.fillText(counter, centerScreenX, centerScreenY + 80);
+        ctx.strokeText(counter, centerScreenX, centerScreenY + 80);
+    }
+
+    /* This function display the win message.
+     */
+    function displayYouWon() {
+        ctx.strokeStyle = 'black';
+        ctx.fillStyle = 'green';
+        ctx.lineWidth = 3;
+        ctx.textAlign = 'center';
+        ctx.font = '80px Impact';
+        ctx.fillText('YOU WON!!', centerScreenX, centerScreenY);
+        ctx.strokeText('YOU WON!!', centerScreenX, centerScreenY);
+    }
+
+
+    /* This function display the lost message.
+     */
+    function displayYouLost() {
+        ctx.strokeStyle = 'black';
+        ctx.fillStyle = 'red';
+        ctx.lineWidth = 3;
+        ctx.textAlign = 'center';
+        ctx.font = '80px Impact';
+        ctx.fillText('LOOSER!!', centerScreenX, centerScreenY);
+        ctx.strokeText('LOOSER!!', centerScreenX, centerScreenY);
+    }
+
+    /* This function check the collisions of an enemy or a gem.
+     */
+    function checkCollisions() {
+
+        for (var i = 0; i < this.allGems.length; i++) {
+            var hitGem = Math.abs(this.player.posX + this.player.width - this.allGems[i].posX) < 50 && Math.abs(this.player.posY + this.player.height - this.allGems[i].posY) < 50;
+            if (hitGem) {
+                if (this.allGems[i].mustRender) {
+                    switch (this.allGems[i].color) {
+                        case 'blue':
+                            this.color = 'blue';
+                            document.getElementById('bg').innerHTML = ++this.score.blueGem;
+                            break;
+                        case 'green':
+                            document.getElementById('gg').innerHTML = ++this.score.greenGem;
+                            break;
+                        case 'orange':
+                            document.getElementById('og').innerHTML = ++this.score.orangeGem;
+                            break;
+                    }
+                }
+                this.allGems[i].mustRender = false;
+            }
+        }
+
+        checkIfLoose();
+
+    }
+
+    /* This function start the counter to start the next game the lost message.
+     */
+    function startCounter() {
+        //Save the state of the screen
+        var image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        // Timer to stop de game for 3 second            
+        restarTimerId = setInterval(function() {
+            ctx.putImageData(image, 0, 0);
+            displayCounter(restarCounter);
+            if (restarCounter === -1) {
+                restarCounter = 3;
+                init();
+                clearInterval(restarTimerId);
+            } else {
+                restarCounter--;
+            }
+        }, 1000);
     }
 
     /* Go ahead and load all of the images we know we're going to need to
@@ -171,8 +340,16 @@ var Engine = (function(global) {
         'images/water-block.png',
         'images/grass-block.png',
         'images/enemy-bug.png',
-        'images/char-boy.png'
+        'images/char-boy.png',
+        'images/char-cat-girl.png',
+        'images/char-horn-girl.png',
+        'images/char-pink-girl.png',
+        'images/char-princess-girl.png',
+        'images/Gem Blue.png',
+        'images/Gem Green.png',
+        'images/Gem Orange.png'
     ]);
+
     Resources.onReady(init);
 
     /* Assign the canvas' context object to the global variable (the window
