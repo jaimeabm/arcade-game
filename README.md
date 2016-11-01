@@ -1,4 +1,4 @@
-# The girls want to marry me - The AWESOME arcade Game!
+# The girls want to marry me - The AWESOME arcade Game!!
 
 **The girl want to marry me** is and arcade game based on the udacity arcade game from the course *Front-End Developer*. 
 
